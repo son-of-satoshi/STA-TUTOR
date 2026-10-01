@@ -9,7 +9,16 @@ from dotenv import load_dotenv
 env_path = pathlib.Path(__file__).parent.parent / '.env'
 load_dotenv(dotenv_path=env_path)
 
-api_key = os.getenv("GEMINI_API_KEY")
+# Try loading from Streamlit secrets first (for cloud deployment), fallback to .env (for local)
+api_key = None
+try:
+    if "GEMINI_API_KEY" in st.secrets:
+        api_key = st.secrets["GEMINI_API_KEY"]
+except Exception:
+    pass
+
+if not api_key:
+    api_key = os.getenv("GEMINI_API_KEY")
 
 if not api_key:
     st.error("GEMINI_API_KEY not found! Please check your .env file.")
