@@ -2,29 +2,20 @@ import os
 import pathlib
 import streamlit as st
 import chromadb
-from google import genai
+import requests
 from dotenv import load_dotenv
 
 # Automatically find and load the .env file from the main STA-Tutor folder
 env_path = pathlib.Path(__file__).parent.parent / '.env'
 load_dotenv(dotenv_path=env_path)
 
-# Try loading from Streamlit secrets first (for cloud deployment), fallback to .env (for local)
-api_key = None
-try:
-    if "GEMINI_API_KEY" in st.secrets:
-        api_key = st.secrets["GEMINI_API_KEY"]
-except Exception:
-    pass
+# Custom API configuration
+CUSTOM_API_URL = os.getenv("CUSTOM_API_URL", "https://api.fadher.tech/v1/rag-chat")
+CUSTOM_API_KEY = os.getenv("CUSTOM_API_KEY")
 
-if not api_key:
-    api_key = os.getenv("GEMINI_API_KEY")
-
-if not api_key:
-    st.error("GEMINI_API_KEY not found! Please check your .env file.")
-else:
-    # Initialize Gemini Client (using google-genai SDK)
-    client = genai.Client(api_key=api_key, vertexai=False)
+if not CUSTOM_API_KEY:
+    st.error("CUSTOM_API_KEY not found! Please check your .env file.")
+    st.stop()
 
 # Paths
 DB_DIR = os.path.join("data", "vector_db")
@@ -70,7 +61,7 @@ if prompt := st.chat_input("What would you like to know about Software Testing?"
                 # 2. Build context string from retrieved chunks
                 context = "\n\n".join(retrieved_chunks)
 
-                # 3. Construct prompt for Gemini
+                # 3. Construct prompt for Custom LLM
                 system_instruction = (
                     "You are STA Tutor, a helpful university teaching assistant for a Software Testing and Assurance course. "
                     "Answer the student's question accurately using *only* the provided course context below. "
@@ -79,17 +70,19 @@ if prompt := st.chat_input("What would you like to know about Software Testing?"
 
                 full_prompt = f"Context:\n{context}\n\nQuestion: {prompt}"
 
-                # 4. Call Gemini model (using gemini-3.5-flash-lite as standard text model)
-                response = client.models.generate_content(
-                    model="gemini-3.5-flash-lite",
-                    contents=full_prompt,
-                    config={
-                        "system_instruction": system_instruction,
-                        "temperature": 0.3 # Keep it factual and tied to notes
-                    }
-                )
+                # 4. Call Custom API
+                headers = {
+                    "Authorization": f"Bearer {CUSTOM_API_KEY}",
+                    "Content-Type": "application/json"
+                }
+                payload = {"query": full_prompt}
+                
+                response = requests.post(CUSTOM_API_URL, headers=headers, json=payload, timeout=30)
+                response.raise_for_status()
+                
+                result = response.json()
+                answer = result.get("answer", result.get("response", str(result)))
 
-                answer = response.text
                 st.markdown(answer)
 
                 # Optional: Show sources neatly
